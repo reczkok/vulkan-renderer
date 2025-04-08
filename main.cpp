@@ -1,6 +1,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include <algorithm>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -15,6 +17,7 @@ const bool enableValidationLayers = false;
 const bool enableValidationLayers = true;
 #endif
 
+namespace fs           = std::filesystem;
 using QueueFamilyIndex = uint32_t;
 
 struct QueueFamilyIndices
@@ -123,19 +126,43 @@ class HelloTriangleApplication
 
 	static std::vector<char> readFile(const std::string &filename)
 	{
-		std::ifstream file(filename, std::ios::ate | std::ios::binary);
+		std::cout << "Current working directory: " << fs::current_path() << "\n";
+
+		fs::path filePath{filename};
+
+		std::vector<fs::path> searchPaths{
+		    filePath,                                                                 // As provided
+		    fs::current_path() / filePath,                                            // Current directory
+		    fs::current_path().parent_path() / filePath,                              // Parent directory
+		    fs::current_path().parent_path().parent_path() / filePath,                // Grandparent directory
+		    fs::current_path().parent_path() / "shaders" / filePath.filename()        // Common shader location
+		};
+
+		std::ifstream file;
+		std::string   attemptedPaths;
+
+		for (const auto &path : searchPaths)
+		{
+			attemptedPaths += path.string() + "\n";
+			file.open(path, std::ios::ate | std::ios::binary);
+			if (file.is_open())
+			{
+				std::cout << "Successfully opened shader file: " << path << "\n";
+				break;
+			}
+		}
 
 		if (!file.is_open())
 		{
-			throw std::runtime_error("failed to open file!");
+			throw std::runtime_error("Failed to open file: " + filename +
+			                         "\nAttempted paths:\n" + attemptedPaths);
 		}
 
-		size_t            fileSize = (size_t) file.tellg();
+		const auto        fileSize = static_cast<std::size_t>(file.tellg());
 		std::vector<char> buffer(fileSize);
 
 		file.seekg(0);
 		file.read(buffer.data(), fileSize);
-		file.close();
 
 		return buffer;
 	}
